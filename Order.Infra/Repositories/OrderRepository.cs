@@ -2,12 +2,9 @@
 using Order.Domain.Interfaces.Repositories;
 using Order.Domain.Interfaces.Repositories.DataConector;
 using Order.Domain.Models;
-using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
-using System.Xml.Linq;
 
 namespace Order.Infra.Repositories
 {
@@ -20,13 +17,17 @@ namespace Order.Infra.Repositories
             this._dbConector = dbConector;
         }
 
-        const string baseSql = @"SELECT [Id]
-                                  ,[ClientId]
-                                  ,[UserId]
-                                  ,[CreateAt]
+        const string baseSql = @"SELECT o.[Id]
+                                  ,o.[CreateAt]
+                                  ,c.Id
+                                  ,c.[Name]
+                                  ,u.Id
+                                  ,u.[Name]
                                 FROM [dbo].[Orders]
+                                JOIN [dbo].[Client] c ON o.ClientId = c.Id 
+                                JOIN [dbo].[User] u ON o.UserId = u.Id
                             WHERE 1 = 1";
-        public async Task ClientItemAsync(OrderItemModel item)
+        public async Task CreateItemAsync(OrderItemModel item)
         {
             const string sql = @"INSERT INTO [dbo].[OrderItem]
                                    ([Id]
@@ -48,8 +49,8 @@ namespace Order.Infra.Repositories
             await _dbConector.dbConnection.ExecuteAsync(sql, new
             {
                 Id = item.Id,
-                OrderId = item.OrderId,
-                ProductId = item.ProductId, 
+                Order = item.Order,
+                Product = item.Product, 
                 SellValue = item.SellValue,
                 Quantity = item.Quantity,
                 TotalAmount = item.TotalAmount,
@@ -78,6 +79,14 @@ namespace Order.Infra.Repositories
                 Items = order.Items,
 
             }, _dbConector.dbTransaction);
+
+            if (order.Items.Any())
+            {
+                foreach (var item in order.Items)
+                {
+                    await CreateItemAsync(item);
+                }
+            }
         }
 
         public async Task UpdateAsync(OrderModel order)
@@ -91,36 +100,46 @@ namespace Order.Infra.Repositories
 
             await _dbConector.dbConnection.ExecuteAsync(sql, new
             {
-                Client = order.Client,
-                User = order.User,
-                Items = order.Items,
-
+                Id = order.Id,
+                ClientId = order.Client.Id,
+                UserID = order.User.Id,
             }, _dbConector.dbTransaction);
 
-        }
-
-        public async Task UpdateItemAsync(OrderItemModel item)
-        {
-            const string sql = @"UPDATE [dbo].[OrderItem]
-                                   SET [Id] = <Id, varchar(32),>
-                                      ,[OrderId] = <OrderId, varchar(32),>
-                                      ,[ProductId] = <ProductId, varchar(32),>
-                                      ,[SellValue] = <SellValue, numeric(8,2),>
-                                      ,[Quantity] = <Quantity, int,>
-                                      ,[TotalAmount] = <TotalAmount, numeric(8,2),>
-                                      ,[CreateAt] = <CreateAt, datetime2(7),>
-                                 WHERE Id = @Id";
-
-            await _dbConector.dbConnection.ExecuteAsync(sql, new
+            if (order.Items.Any())
             {
-                OrderId = item.OrderId,
-                ProductId = item.ProductId,
-                SellValue = item.SellValue,
-                Quantity = item.Quantity,
-                TotalAmount = item.TotalAmount,
+                string deleteItem = @"DELETE FROM [dbo].[OrderItem] WHERE OrderId = @OrderId";
 
-            }, _dbConector.dbTransaction);
+                await _dbConector.dbConnection.ExecuteAsync(deleteItem, new { OrderId = order.Id }, _dbConector.dbTransaction);
+
+                foreach (var item in order.Items)
+                {
+                    await CreateItemAsync(item);
+                }
+            }
         }
+
+        //public async Task UpdateItemAsync(OrderItemModel item)
+        //{
+        //    const string sql = @"UPDATE [dbo].[OrderItem]
+        //                           SET [Id] = <Id, varchar(32),>
+        //                              ,[OrderId] = <OrderId, varchar(32),>
+        //                              ,[ProductId] = <ProductId, varchar(32),>
+        //                              ,[SellValue] = <SellValue, numeric(8,2),>
+        //                              ,[Quantity] = <Quantity, int,>
+        //                              ,[TotalAmount] = <TotalAmount, numeric(8,2),>
+        //                              ,[CreateAt] = <CreateAt, datetime2(7),>
+        //                         WHERE Id = @Id";
+
+        //    await _dbConector.dbConnection.ExecuteAsync(sql, new
+        //    {
+        //        Order = item.Order,
+        //        Product = item.Product,
+        //        SellValue = item.SellValue,
+        //        Quantity = item.Quantity,
+        //        TotalAmount = item.TotalAmount,
+
+        //    }, _dbConector.dbTransaction);
+        //}
 
         public async Task DeleteAsync(string orderId)
         {
@@ -148,34 +167,77 @@ namespace Order.Infra.Repositories
         public async Task<OrderModel> GetByIdAsync(string orderId)
         {
             string sql = $"{baseSql} AND Id = @Id";
-
-            var orders = await _dbConector.dbConnection.QueryAsync<OrderModel>(sql, new { Id = orderId }, _dbConector.dbTransaction);
+                                                                                                       //Retorno
+            var orders = await _dbConector.dbConnection.QueryAsync<OrderModel, ClientModel, UserModel, OrderModel>(
+                //Divisões para o mapeamento
+                sql: sql,                           //Caminho da Query que será usada
+                map: (order, client, user) => {     //Nomeação de cada objeto sendo usado no "QuerAsync"
+                    order.Client = client;          //Mapeamento
+                    order.User = user;
+                    return order;
+                },
+                param: new { Id = orderId },        //Id, como escolha de retorno de novo objeto.
+                splitOn: "Id",                      ////Sempre que bater em um Id, irá retornar um novo objeto.                  
+                transaction: _dbConector.dbTransaction);
 
             return orders.FirstOrDefault();
         }
 
-        public async Task<List<OrderModel>> ListByFilterAsync(string orderId = null, string name = null)
+        public async Task<List<OrderModel>> ListByFilterAsync(string orderId = null, string clientId = null, string userId = null)
         {
             string sql = $"{baseSql}";
 
             if (string.IsNullOrWhiteSpace(orderId))
                 sql += "AND Id = @Id";
 
-            if (string.IsNullOrWhiteSpace(name))
+            if (string.IsNullOrWhiteSpace(clientId))
+                sql += "AND Id = @Id";
+
+            if (string.IsNullOrWhiteSpace(userId))
                 sql += "AND Name like @Name";
 
-            var orders = await _dbConector.dbConnection.QueryAsync<OrderModel>(sql, new { Id = orderId, Name = "%" + name + "%" }, _dbConector.dbTransaction);
-            
+            var orders = await _dbConector.dbConnection.QueryAsync<OrderModel, ClientModel, UserModel, OrderModel>(
+                sql: sql,
+                map: (order, client, user) =>
+                {
+                    order.Client = client;
+                    order.User = user;
+                    return order;
+                },
+                param: new { OrderId = orderId, ClientId = clientId, UserId = userId },
+                splitOn: "Id",
+                transaction: _dbConector.dbTransaction);
+
             return orders.ToList();
         }
 
         public async Task<List<OrderItemModel>> ListItemOrderIdAsync(string orderId)
         {
-            string sql = $"{baseSql}";
+            string sql = @"SELECT oi.[Id]
+                                 ,oi.[OrderId]
+                                ,oi.[ProductId]
+                                ,oi.[SellValue]
+                                ,oi.[Quantity]
+                                ,oi.[TotalAmount]
+                                ,oi.[CreateAt]
+                                ,p.[Description]
+                            FROM [dbo].[OrderItem]
+                            JOIN [dbo].[Product] p on oi.ProductId = p.id
+                            WHERE oi.OrderId = @OrderId";
 
-            var orders = await _dbConector.dbConnection.QueryAsync<OrderItemModel>(sql, new { Id = orderId }, _dbConector.dbTransaction);
+            var itens = await _dbConector.dbConnection.QueryAsync<OrderItemModel, OrderModel, ProductModel, OrderItemModel>(
+                sql: sql,
+                map: (item, order, prod) =>
+                {
+                    item.Order = order;
+                    item.Product = prod;
+                    return item;
+                },
+                param: new { Id = orderId },
+                splitOn: "Id",
+                transaction: _dbConector.dbTransaction);
 
-            return orders.ToList();
+            return itens.ToList();
         }
     }
 }
