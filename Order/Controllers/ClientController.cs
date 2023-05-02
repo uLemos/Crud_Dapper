@@ -21,6 +21,16 @@ namespace Order.Api.Controllers
 
         // GET: api/<ClientController>
         [HttpGet]
+
+        public async Task<ActionResult> Get([FromQuery] string clientid, [FromQueryAttribute] string name)
+        {
+            var response = await _clientApplication.ListByFilterAsync(clientid, name);
+
+            if (response.Report.Any())
+                return UnprocessableEntity(response.Report);
+
+            return Ok(response);
+        }
         public IEnumerable<string> Get()
         {
             return new string[] { "value1", "value2" };

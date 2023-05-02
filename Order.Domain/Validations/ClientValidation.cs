@@ -19,7 +19,8 @@ namespace Order.Domain.Validations
 
             RuleFor(x => x.PhoneNumber)
                 .NotNull()
-                .NotEmpty();
+                .NotEmpty()
+                .Length(8, 9);
         }
     }
 }

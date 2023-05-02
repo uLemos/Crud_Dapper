@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 
 namespace Order.Api.Controllers
 {
-    [Route("api/[controller]")]
+    [Route("api/product")]
     [ApiController]
     public class ProductController : ControllerBase
     {

@@ -8,11 +8,11 @@ using System.Threading.Tasks;
 
 namespace Order.Application.Application
 {
-    public class CreateApplication : IClientApplication
+    public class ClientApplication : IClientApplication
     {
         private readonly IClientService _clientService;
         private readonly IMapper _mapper;
-        public CreateApplication(IClientService clientService, IMapper mapper)
+        public ClientApplication(IClientService clientService, IMapper mapper)
         {
             _clientService = clientService;
             _mapper = mapper;

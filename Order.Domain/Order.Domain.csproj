@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <PackageReference Include="FluentValidation" Version="11.5.2" />
+    <PackageReference Include="NPOI" Version="2.6.0" />
   </ItemGroup>
 
 </Project>

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using NPOI.SS.Formula.Functions;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -13,7 +14,7 @@ namespace Order.Domain.Validations.Base
 
         public Response(List<Report> reports)
         {
-            Report = reports;
+            Report = reports ?? new List<Report>(); //"??" Se for null, ele vai gerar uma nova lista de Reports.
         }
 
         public Response(Report report) : this(new List<Report>() { report })
@@ -27,6 +28,10 @@ namespace Order.Domain.Validations.Base
         public static Response OK() => new Response();
         public static Response Unprocessable(List<Report> reports) => new Response(reports);
         public static Response Unprocessable(Report reports) => new Response(reports);
+        public static Response<T> Unprocessable<T>(List<Report> reports)
+        {
+            return new Response<T>(reports);
+        }
     }
 
     public class Response<T> : Response
@@ -34,6 +39,10 @@ namespace Order.Domain.Validations.Base
         public Response()
         {
         
+        }
+        public Response(List<Report> reports) : base(reports)
+        {
+
         }
         public Response(T data, List<Report> reports = null) : base(reports)
         {
